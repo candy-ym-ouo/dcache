@@ -16,12 +16,14 @@ import (
 
 type Config struct {
 	Addr, Name, HTTPAddr, Seed, LogLevel        string
+	SnapshotPath                                string
 	MaxKeys                                     int
 	ConnTimeout, ShutdownTimeout, SweepInterval time.Duration
+	SnapshotInterval                            time.Duration
 }
 
 func Default() Config {
-	return Config{Addr: "127.0.0.1:7301", Name: "node-1", HTTPAddr: "127.0.0.1:8080", MaxKeys: 10000, ConnTimeout: 10 * time.Second, ShutdownTimeout: 5 * time.Second, SweepInterval: time.Second}
+	return Config{Addr: "127.0.0.1:7301", Name: "node-1", HTTPAddr: "127.0.0.1:8080", MaxKeys: 10000, ConnTimeout: 10 * time.Second, ShutdownTimeout: 5 * time.Second, SweepInterval: time.Second, SnapshotInterval: 5 * time.Minute}
 }
 func (c Config) Validate() error {
 	if c.Addr == "" || c.Name == "" {
@@ -29,6 +31,12 @@ func (c Config) Validate() error {
 	}
 	if c.MaxKeys < 1 {
 		return fmt.Errorf("max-keys must be positive")
+	}
+	if c.ConnTimeout <= 0 || c.ShutdownTimeout <= 0 || c.SweepInterval <= 0 {
+		return fmt.Errorf("timeouts and sweep interval must be positive")
+	}
+	if c.SnapshotPath != "" && c.SnapshotInterval <= 0 {
+		return fmt.Errorf("snapshot interval must be positive when snapshots are enabled")
 	}
 	return nil
 }
@@ -56,6 +64,9 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.SweepInterval == 0 {
 		c.SweepInterval = d.SweepInterval
+	}
+	if c.SnapshotInterval == 0 {
+		c.SnapshotInterval = d.SnapshotInterval
 	}
 }
 func (c Config) IsDevelopment() bool             { return c.LogLevel == "debug" || c.LogLevel == "trace" }
