@@ -69,7 +69,8 @@ func (s *Store) Increment(key string, delta int64) (int64, error) {
 }
 
 // Len reports the number of live entries.
-func (s *Store) Len() int { s.mu.RLock(); defer s.mu.RUnlock(); return len(s.items) }
+func (s *Store) Len() int { s.mu.RLock(); defer s.mu.RUnlock(); return s.lockedLen() }
+func (s *Store) lockedLen() int { return len(s.items) }
 
 // SnapshotItems copies live entries for migration or inspection.
 func (s *Store) SnapshotItems() []Item {
