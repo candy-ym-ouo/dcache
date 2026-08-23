@@ -1,0 +1,1 @@
+async function refresh(){try{const r=await fetch('/api/status');document.querySelector('#status').textContent=JSON.stringify(await r.json(),null,2)}catch(e){document.querySelector('#status').textContent='连接断开'}}refresh();setInterval(refresh,2000)
