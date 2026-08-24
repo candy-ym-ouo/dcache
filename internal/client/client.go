@@ -2,6 +2,7 @@ package client
 
 import (
 	"bufio"
+	"context"
 	"dcache/internal/protocol"
 	"fmt"
 	"net"
@@ -18,12 +19,23 @@ type Client struct {
 
 func New(addr string) *Client { return &Client{addr: addr, timeout: 3 * time.Second} }
 func (c *Client) Do(cmd protocol.Command, key string, value []byte, extra uint64) (protocol.Response, error) {
-	conn, e := net.DialTimeout("tcp", c.addr, c.timeout)
+	return c.DoContext(context.Background(), cmd, key, value, extra)
+}
+func (c *Client) DoContext(ctx context.Context, cmd protocol.Command, key string, value []byte, extra uint64) (protocol.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	dialer := net.Dialer{Timeout: c.timeout}
+	conn, e := dialer.DialContext(ctx, "tcp", c.addr)
 	if e != nil {
-		return protocol.Response{}, fmt.Errorf("request failed: %v", e)
+		return protocol.Response{}, fmt.Errorf("request failed: %w", e)
 	}
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(c.timeout))
+	deadline := time.Now().Add(c.timeout)
+	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
+		deadline = ctxDeadline
+	}
+	_ = conn.SetDeadline(deadline)
 	r := protocol.Request{Seq: atomic.AddUint32(&c.seq, 1), Cmd: cmd, Key: []byte(key), Value: value, Extra: extra}
 	if e = r.Encode(conn); e != nil {
 		return protocol.Response{}, e

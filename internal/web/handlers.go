@@ -6,13 +6,22 @@ import (
 )
 
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
+	if s.store == nil || s.cluster == nil || s.metrics == nil {
+		writeError(w, http.StatusServiceUnavailable, "dependency not initialized")
+		return
+	}
 	k, h, m, e, x := s.store.Stats()
 	req, _, _ := s.metrics.Snapshot()
-	json.NewEncoder(w).Encode(map[string]any{"node": s.cluster.Self(), "members": s.cluster.Members(), "keys": k, "hits": h, "misses": m, "evicted": e, "expired": x, "requests": req})
+	writeJSON(w, map[string]any{"node": s.cluster.Self(), "members": s.cluster.Members(), "keys": k, "hits": h, "misses": m, "evicted": e, "expired": x, "requests": req})
 }
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+func writeError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 func (s *Server) members(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.cluster.Members()) }
 func (s *Server) keys(w http.ResponseWriter, r *http.Request) {
@@ -28,8 +37,8 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/healthz", s.health)
 }
 func (s *Server) metricsJSON() map[string]any {
-	r, h, m := s.metrics.Snapshot()
-	return map[string]any{"requests": r, "hits": h, "misses": m, "hitRate": s.metrics.HitRate()}
+	d := s.metrics.Details()
+	return map[string]any{"requests": d.Requests, "hits": d.Hits, "misses": d.Misses, "hitRate": d.HitRate, "missRate": d.MissRate, "totalLatencyMs": d.TotalLatency.Milliseconds(), "averageLatencyMs": d.AverageLatency.Milliseconds(), "maxLatencyMs": d.MaxLatency.Milliseconds()}
 }
 func (s *Server) metricsHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.metricsJSON())
