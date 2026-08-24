@@ -9,6 +9,8 @@ import (
 )
 
 func (s *Server) dispatch(r protocol.Request) protocol.Response {
+	started := time.Now()
+	defer func() { s.metrics.Observe(time.Since(started)) }()
 	s.metrics.Request()
 	resp := protocol.Response{Seq: r.Seq}
 	if err := r.Valid(); err != nil {
