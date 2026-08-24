@@ -13,6 +13,8 @@ import (
 
 func (s *Server) handle(c net.Conn) {
 	defer c.Close()
+	defer s.untrackConn(c)
+	s.trackConn(c)
 	r := bufio.NewReader(c)
 	for {
 		if s.cfg.ConnTimeout > 0 { _ = c.SetDeadline(time.Now().Add(s.cfg.ConnTimeout)) }

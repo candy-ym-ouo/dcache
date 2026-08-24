@@ -21,6 +21,8 @@ type Server struct {
 	ln      net.Listener
 	wg      sync.WaitGroup
 	stop    chan struct{}
+	connMu  sync.Mutex
+	conns   map[net.Conn]struct{}
 }
 
 func (s *Server) Addr() string {
@@ -52,7 +54,7 @@ func (s *Server) Stop() {
 func (s *Server) Wait() { s.wg.Wait() }
 
 func New(c config.Config, s *cache.Store, g *cluster.Cluster, m *metrics.Metrics) *Server {
-	return &Server{cfg: c, store: s, cluster: g, metrics: m, stop: make(chan struct{})}
+	return &Server{cfg: c, store: s, cluster: g, metrics: m, stop: make(chan struct{}), conns: make(map[net.Conn]struct{})}
 }
 func (s *Server) ListenAndServe() error {
 	ln, e := net.Listen("tcp", s.cfg.Addr)
@@ -74,6 +76,16 @@ func (s *Server) ListenAndServe() error {
 		go func() { defer s.wg.Done(); s.handle(c) }()
 	}
 }
+func (s *Server) trackConn(c net.Conn) {
+	s.connMu.Lock()
+	s.conns[c] = struct{}{}
+	s.connMu.Unlock()
+}
+func (s *Server) untrackConn(c net.Conn) {
+	s.connMu.Lock()
+	delete(s.conns, c)
+	s.connMu.Unlock()
+}
 func (s *Server) Shutdown(ctx context.Context) error {
 	select {
 	case <-s.stop:
@@ -83,6 +95,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.ln != nil {
 		_ = s.ln.Close()
 	}
+	s.connMu.Lock()
+	for c := range s.conns {
+		_ = c.Close()
+	}
+	s.conns = make(map[net.Conn]struct{})
+	s.connMu.Unlock()
 	done := make(chan struct{})
 	go func() { s.wg.Wait(); close(done) }()
 	select {

@@ -79,7 +79,9 @@ func (s *Store) SnapshotItems() []Item {
 	now := time.Now()
 	for _, i := range s.items {
 		if !i.Expired(now) {
-			out = append(out, Item{Key: i.Key, Value: append([]byte(nil), i.Value...), ExpiresAt: i.ExpiresAt})
+			v := make([]byte, len(i.Value))
+			copy(v, i.Value)
+			out = append(out, Item{Key: i.Key, Value: v, ExpiresAt: i.ExpiresAt})
 		}
 	}
 	return out
