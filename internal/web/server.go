@@ -6,6 +6,7 @@ import (
 	"dcache/internal/cluster"
 	"dcache/internal/metrics"
 	"embed"
+	"errors"
 	"io/fs"
 	"net/http"
 )
@@ -20,7 +21,20 @@ type Server struct {
 	metrics *metrics.Metrics
 }
 
-func New(addr string, s *cache.Store, c *cluster.Cluster, m *metrics.Metrics) *Server {
+// New validates its dependencies and rejects construction when any required
+// collaborator is missing, so handlers can assume non-nil wiring. Returning an
+// error instead of panicking keeps the failure local to the caller and avoids
+// relying on package-level defaults to paper over a misconfigured assembly.
+func New(addr string, s *cache.Store, c *cluster.Cluster, m *metrics.Metrics) (*Server, error) {
+	if s == nil {
+		return nil, errors.New("web: store dependency must not be nil")
+	}
+	if c == nil {
+		return nil, errors.New("web: cluster dependency must not be nil")
+	}
+	if m == nil {
+		return nil, errors.New("web: metrics dependency must not be nil")
+	}
 	x := &Server{store: s, cluster: c, metrics: m}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", x.status)
@@ -31,13 +45,20 @@ func New(addr string, s *cache.Store, c *cluster.Cluster, m *metrics.Metrics) *S
 	mux.HandleFunc("/api/key-ttl", x.keyTTL)
 	mux.HandleFunc("/api/migration", x.migration)
 	mux.HandleFunc("/api/version", x.version)
+	mux.HandleFunc("/api/metrics", x.metricsHandler)
+	mux.HandleFunc("/api/topology", x.topology)
+	mux.HandleFunc("/api/reset-metrics", x.resetMetrics)
+	mux.HandleFunc("/api/flush", x.flush)
+	mux.HandleFunc("/api/delete-prefix", x.deletePrefix)
+	mux.HandleFunc("/api/capacity", x.capacity)
+	mux.HandleFunc("/api/live", x.live)
 	staticFS, err := fs.Sub(assets, "assets")
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
 	x.http = &http.Server{Addr: addr, Handler: mux}
-	return x
+	return x, nil
 }
 func (s *Server) ListenAndServe() error {
 	e := s.http.ListenAndServe()

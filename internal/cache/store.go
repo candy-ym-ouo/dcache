@@ -94,7 +94,7 @@ func (s *Store) Get(key string) ([]byte, bool) {
 	}
 	s.order.touch(i)
 	s.hits++
-	return i.Value, true
+	return append([]byte(nil), i.Value...), true
 }
 func (s *Store) Del(key string) bool {
 	s.mu.Lock()
@@ -150,6 +150,32 @@ func (s *Store) Flush() {
 	s.items = make(map[string]*Item)
 	s.order = lru{}
 	s.mu.Unlock()
+}
+func (s *Store) RestoreSnapshot(items []Item) (restored, skipped int) {
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	replacement := make(map[string]*Item, min(len(items), s.max))
+	order := lru{}
+	for _, item := range items {
+		if item.Key == "" || item.Expired(now) {
+			continue
+		}
+		if len(replacement) >= s.max {
+			skipped++
+			continue
+		}
+		if _, exists := replacement[item.Key]; exists {
+			continue
+		}
+		clone := item.Clone()
+		replacement[clone.Key] = &clone
+		order.add(&clone)
+		restored++
+	}
+	s.items = replacement
+	s.order = order
+	return restored, skipped
 }
 func (s *Store) Stats() (int, uint64, uint64, uint64, uint64) {
 	s.mu.RLock()
