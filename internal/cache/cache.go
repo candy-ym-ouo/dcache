@@ -89,9 +89,6 @@ func (s *Store) SnapshotItems() []Item {
 func (s *Store) DeletePrefix(prefix string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.hasPrefix(prefix) {
-		return 0
-	}
 	n := 0
 	for k, i := range s.items {
 		if strings.HasPrefix(k, prefix) {

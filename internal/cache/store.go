@@ -2,7 +2,6 @@ package cache
 
 import (
 	"sync"
-	"strings"
 	"time"
 )
 
@@ -78,7 +77,6 @@ func (s *Store) Set(key string, v []byte, ttl time.Duration) error {
 	s.order.add(i)
 	return nil
 }
-func (s *Store) hasPrefix(prefix string) bool { for key := range s.items { if strings.HasPrefix(key, prefix) { return true } }; return false }
 func (s *Store) Get(key string) ([]byte, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -152,6 +150,32 @@ func (s *Store) Flush() {
 	s.items = make(map[string]*Item)
 	s.order = lru{}
 	s.mu.Unlock()
+}
+func (s *Store) RestoreSnapshot(items []Item) (restored, skipped int) {
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	replacement := make(map[string]*Item, min(len(items), s.max))
+	order := lru{}
+	for _, item := range items {
+		if item.Key == "" || item.Expired(now) {
+			continue
+		}
+		if len(replacement) >= s.max {
+			skipped++
+			continue
+		}
+		if _, exists := replacement[item.Key]; exists {
+			continue
+		}
+		clone := item.Clone()
+		replacement[clone.Key] = &clone
+		order.add(&clone)
+		restored++
+	}
+	s.items = replacement
+	s.order = order
+	return restored, skipped
 }
 func (s *Store) Stats() (int, uint64, uint64, uint64, uint64) {
 	s.mu.RLock()

@@ -31,6 +31,13 @@ func New(addr string, s *cache.Store, c *cluster.Cluster, m *metrics.Metrics) *S
 	mux.HandleFunc("/api/key-ttl", x.keyTTL)
 	mux.HandleFunc("/api/migration", x.migration)
 	mux.HandleFunc("/api/version", x.version)
+	mux.HandleFunc("/api/metrics", x.metricsHandler)
+	mux.HandleFunc("/api/topology", x.topology)
+	mux.HandleFunc("/api/reset-metrics", x.resetMetrics)
+	mux.HandleFunc("/api/flush", x.flush)
+	mux.HandleFunc("/api/delete-prefix", x.deletePrefix)
+	mux.HandleFunc("/api/capacity", x.capacity)
+	mux.HandleFunc("/api/live", x.live)
 	staticFS, err := fs.Sub(assets, "assets")
 	if err != nil {
 		panic(err)
