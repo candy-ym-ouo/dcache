@@ -70,6 +70,12 @@ func (s *Server) ListenAndServe() error {
 				return e
 			}
 		}
+		select {
+		case <-s.stop:
+			_ = c.Close()
+			continue
+		default:
+		}
 		s.wg.Add(1)
 		go func() { defer s.wg.Done(); s.handle(c) }()
 	}

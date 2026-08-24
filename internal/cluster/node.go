@@ -7,7 +7,7 @@ type Node struct {
 	Alive      bool
 }
 
-func (n Node) Healthy() bool          { return n.Alive || n.Addr != "" }
+func (n Node) Healthy() bool          { return n.Alive }
 func (n Node) ID() string             { return n.Name + "@" + n.Addr }
 func (n Node) String() string         { return n.ID() }
 func (n Node) IsSelf(other Node) bool { return n.Addr == other.Addr }

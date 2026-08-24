@@ -22,7 +22,12 @@ func (c *Cluster) Self() Node { c.mu.RLock(); defer c.mu.RUnlock(); return c.sel
 func (c *Cluster) Add(n Node) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if _, exists := c.nodes[n.Addr]; exists { return }
+	if old, ok := c.nodes[n.Addr]; ok {
+		if old.Name != n.Name || old.Alive != n.Alive {
+			c.nodes[n.Addr] = n
+		}
+		return
+	}
 	c.nodes[n.Addr] = n
 	c.ring.Add(n.Addr)
 }
