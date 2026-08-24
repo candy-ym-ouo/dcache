@@ -28,8 +28,8 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/healthz", s.health)
 }
 func (s *Server) metricsJSON() map[string]any {
-	r, h, m := s.metrics.Snapshot()
-	return map[string]any{"requests": r, "hits": h, "misses": m, "hitRate": s.metrics.HitRate()}
+	d := s.metrics.Details()
+	return map[string]any{"requests": d.Requests, "hits": d.Hits, "misses": d.Misses, "hitRate": d.HitRate, "missRate": d.MissRate, "totalLatencyMs": d.TotalLatency.Milliseconds(), "averageLatencyMs": d.AverageLatency.Milliseconds(), "maxLatencyMs": d.MaxLatency.Milliseconds()}
 }
 func (s *Server) metricsHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.metricsJSON())
