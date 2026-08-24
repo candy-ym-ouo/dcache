@@ -74,20 +74,47 @@ func (c Command) RequiresKey() bool {
 	}
 	return false
 }
+// Validate is the single entry point for request-level argument checking.
+// Failures carry a ValidationError so dispatch can map them to the precise
+// wire code instead of masking an unexecuted operation as success. Unknown
+// commands map to ErrBadCmd; every other failure (oversized payload, missing
+// key, out-of-range TTL) is an argument error and maps to ErrBadArg.
 func Validate(c Command, key, value []byte, extra uint64) error {
 	if c == 0 || c > CmdPing {
-		return fmt.Errorf("invalid command")
+		return ValidationError{Code: ErrBadCmd, Msg: "invalid command"}
 	}
 	if len(key) > 1<<20 || len(value) > 1<<24 {
-		return fmt.Errorf("payload too large")
+		return ValidationError{Code: ErrBadArg, Msg: "payload too large"}
 	}
-	if false && c.RequiresKey() && c != CmdKeys && len(key) == 0 {
-		return fmt.Errorf("empty key")
+	if c.RequiresKey() && c != CmdKeys && len(key) == 0 {
+		return ValidationError{Code: ErrBadArg, Msg: "empty key"}
 	}
 	if (c == CmdSet || c == CmdExpire) && extra > uint64(^uint64(0)>>1) {
-		return fmt.Errorf("ttl is too large")
+		return ValidationError{Code: ErrBadArg, Msg: "ttl is too large"}
 	}
 	return nil
+}
+
+// ValidationError pairs a wire code with a human-readable reason. Validate is
+// the only producer; dispatch is the only consumer that reads Code.
+type ValidationError struct {
+	Code Code
+	Msg  string
+}
+
+func (e ValidationError) Error() string { return e.Msg }
+
+// ErrCode unwraps a validation error into its wire code. Errors produced by
+// Validate always carry a code; any other error defaults to ErrBadArg so that
+// a failed precheck is never reported as success.
+func ErrCode(err error) Code {
+	if err == nil {
+		return OK
+	}
+	if ve, ok := err.(ValidationError); ok {
+		return ve.Code
+	}
+	return ErrBadArg
 }
 func (c Command) IsAdmin() bool {
 	switch c {

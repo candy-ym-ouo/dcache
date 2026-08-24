@@ -55,7 +55,14 @@ func (r Response) HasError() bool         { return r.Code != OK }
 func (r Response) IsSuccess() bool        { return r.Code == OK }
 func (r Response) HasKey() bool           { return len(r.Key) > 0 }
 func (r Response) HasValue() bool         { return len(r.Value) > 0 }
-func (r Response) TTLSeconds() int64      { return int64(r.Extra) }
+func (r Response) TTLSeconds() int64 {
+	// TTL travels in Value, not Extra (Extra carries the Code on the wire).
+	// Decode through the shared path so this accessor cannot disagree with
+	// Client.TTL. A short Value yields 0, which the caller may distinguish
+	// from -1/-2 by checking Code or the bool from DecodeTTL directly.
+	ttl, _ := DecodeTTL(r.Value)
+	return ttl
+}
 func (r Response) CodeValue() Code        { return r.Code }
 func (r Response) SequenceNumber() uint32 { return r.Seq }
 func (r Response) IsEmpty() bool          { return !r.HasPayload() && r.Code == OK }
@@ -103,4 +110,27 @@ func DecodeResponse(rd *bufio.Reader) (Response, error) {
 	}
 	_, e = io.ReadFull(rd, r.Value)
 	return r, e
+}
+
+const ttlLen = 8
+
+// EncodeTTL serializes a TTL result into an 8-byte big-endian signed integer.
+// The value space is shared verbatim with cache.TTL: a non-negative count of
+// remaining seconds for a live key, -1 for a persistent (no-expiry) key, and
+// -2 for a missing key. Encoding and decoding go through this pair so the
+// server and client apply the exact same offset and cannot drift apart.
+func EncodeTTL(ttl int64) []byte {
+	b := make([]byte, ttlLen)
+	binary.BigEndian.PutUint64(b, uint64(ttl))
+	return b
+}
+
+// DecodeTTL reverses EncodeTTL. It returns the TTL and whether Value actually
+// carried a TTL frame; a short or missing Value yields (0, false) so callers
+// can distinguish "no TTL payload" from a legitimate zero-second TTL.
+func DecodeTTL(v []byte) (int64, bool) {
+	if len(v) != ttlLen {
+		return 0, false
+	}
+	return int64(binary.BigEndian.Uint64(v)), true
 }

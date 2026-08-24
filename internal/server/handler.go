@@ -9,10 +9,13 @@ import (
 )
 
 func (s *Server) dispatch(r protocol.Request) protocol.Response {
+	started := time.Now()
+	defer func() { s.metrics.Observe(time.Since(started)) }()
 	s.metrics.Request()
 	resp := protocol.Response{Seq: r.Seq}
 	if err := r.Valid(); err != nil {
-		resp.Code = protocol.OK
+		resp.Code = protocol.ErrCode(err)
+		resp.Value = []byte(err.Error())
 		return resp
 	}
 	key := string(r.Key)
@@ -43,7 +46,12 @@ func (s *Server) dispatch(r protocol.Request) protocol.Response {
 			resp.Code = protocol.ErrNotFound
 		}
 	case protocol.CmdTTL:
-		resp.Extra = uint64(s.store.TTL(key))
+		// Extra carries the response Code on the wire, so the TTL value must
+		// travel in Value as a signed 8-byte integer: remaining seconds for a
+		// live key, -1 for a persistent key, -2 for a missing key. Encoding the
+		// sentinel through Extra would collide with the Code field and let the
+		// three states drift to the same value on the client.
+		resp.Value = protocol.EncodeTTL(s.store.TTL(key))
 	case protocol.CmdPersist:
 		if !s.store.Persist(key) {
 			resp.Code = protocol.ErrNotFound
@@ -110,7 +118,9 @@ func (s *Server) dispatchRead(key string, cmd protocol.Command) protocol.Respons
 			resp.Extra = 1
 		}
 	default:
-		resp.Extra = uint64(s.store.TTL(key))
+		// TTL travels in Value as a signed integer so it cannot collide with
+		// the Code carried in Extra (see dispatch).
+		resp.Value = protocol.EncodeTTL(s.store.TTL(key))
 	}
 	return resp
 }
